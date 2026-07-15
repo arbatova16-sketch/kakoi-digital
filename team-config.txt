@@ -1,5 +1,0 @@
-window.TEAM_CONFIG = {
-  enabled: false,
-  supabaseUrl: "",
-  supabaseAnonKey: ""
-};
