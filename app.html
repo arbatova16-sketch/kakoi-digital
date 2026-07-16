@@ -38,14 +38,14 @@
   <div class="sec"><div class="head"><h2>Таблица</h2><small id="memberCount"></small></div><div class="card leaderboard" id="leaderboard"></div></div>
 </div>
 </section>
-<div style="text-align:center;color:#666;font-size:11px;margin:18px 0 0">Версия <span id="appVersionLabel">2026.07.15.15</span></div></main>
+<div style="text-align:center;color:#666;font-size:11px;margin:18px 0 0">Версия <span id="appVersionLabel">2026.07.15.16</span></div></main>
 <nav class="nav"><button class="nbtn active" data-page="today"><span class="ni">◷</span><span class="nl">Сегодня</span></button><button class="nbtn" data-page="stats"><span class="ni">▥</span><span class="nl">Статистика</span></button><button class="nbtn" data-page="days"><span class="ni">▦</span><span class="nl">Дни</span></button><button class="nbtn" data-page="challenge"><span class="ni">🏆</span><span class="nl">Челлендж</span></button></nav>
 <dialog id="settingsDlg"><div class="modal"><h3>Настройки</h3><div class="field"><label>Цель в день, часов</label><input id="target" type="number" min="1" max="24" step=".25"></div><div class="field"><label>Допустимо нарушений</label><input id="allowed" type="number" min="0" max="31"></div><div class="ma"><button class="secondary" id="settingsCancel">Отмена</button><button class="confirm" id="settingsSave">Сохранить</button></div><div class="ma"><button class="dangerbtn" id="clear">Удалить все данные</button></div></div></dialog>
 <dialog id="manualDlg"><div class="modal"><h3 id="manualTitle"></h3><input type="hidden" id="manualId"><div class="field"><label>Дата</label><input type="date" id="manualDate"></div><div class="row"><div class="field"><label>Пришёл</label><input type="time" id="manualStart"></div><div class="field"><label>Ушёл · можно оставить пустым</label><input type="time" id="manualEnd"></div></div><div class="field"><label>Заметка</label><textarea id="manualNote"></textarea></div><div class="ma"><button class="secondary" id="manualCancel">Отмена</button><button class="confirm" id="manualSave">Сохранить</button></div></div></dialog>
 <dialog id="detailDlg"><div class="modal"><h3 id="detailTitle"></h3><div class="detailbox"><img id="detailImg"><div class="ds"><div class="dnum" id="detailTotal"></div><div class="dstatus" id="detailStatus"></div></div></div><div class="card list" id="detailList"></div><div class="ma"><button class="secondary" id="detailAdd">Добавить</button><button class="confirm" id="detailClose">Готово</button></div></div></dialog>
 <dialog id="resultDlg"><div class="result-popup"><div class="result-popup-image" id="resultPopupImageWrap"><img id="resultPopupImg" alt="Мем по итогам рабочего дня"></div><div class="result-popup-head"><h3 id="resultPopupTitle"></h3><p id="resultPopupText"></p><div class="result-popup-total" id="resultPopupTotal"></div></div><div class="result-popup-actions"><button class="confirm" id="resultClose">спасибо за все</button></div></div></dialog>
 <script>
-window.APP_VERSION = new URLSearchParams(location.search).get("v") || "2026.07.15.15";
+window.APP_VERSION = new URLSearchParams(location.search).get("v") || "2026.07.15.16";
 window.ASSET_NONCE = Date.now();
 
 
@@ -143,10 +143,194 @@ function renderDays(){const m=$("daysMonth").value||mk(),q=S.settings.targetHour
 function openDetail(d,refresh=false){S.detail=d;const l=ss(d),t=total(d),q=S.settings.targetHours*36e5,x=meme(cat(t),d);$("detailTitle").textContent=fday(d);$("detailImg").src=x.im;$("detailTotal").textContent=fdur(t);$("detailStatus").textContent=we(d)?"Выходной: в лимит нарушений не входит.":l.some(s=>!s.end)?"Таймер ещё идёт.":t>=q?`${x.title} Сверх нормы ${fdur(t-q)}.`:`${x.title} Не хватило ${fdur(q-t)}.`;$("detailList").innerHTML=intervalHTML(l);if(!refresh||!$("detailDlg").open)$("detailDlg").showModal()}
 
 const TEAM_LOCAL_KEY="factoryTeamLocalV1";
-const TEAM={client:null,user:null,membership:null,loading:false,error:"",initialized:false,syncTimer:null,channel:null,leaderboard:[],config:{},actionMessage:"",actionIsError:false};
+const TEAM={client:null,user:null,membership:null,loading:false,error:"",initialized:false,syncTimer:null,channel:null,pollTimer:null,leaderboard:[],config:{},actionMessage:"",actionIsError:false};
 function teamConfigured(){return !!(TEAM.config&&TEAM.config.enabled&&TEAM.config.supabaseUrl&&TEAM.config.supabaseAnonKey)}
 async function reloadTeamConfig(){window.TEAM_CONFIG=undefined;await loadScriptAsset("team-config.js",20000);TEAM.config=window.TEAM_CONFIG||{};if(!teamConfigured())throw new Error("team-config.js загрузился, но настройки Supabase не заполнены");return TEAM.config}
-async function ensureSupabaseLibrary(){if(window.supabase&&window.supabase.createClient)return;let lastError=null;for(const src of ["https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2","https://unpkg.com/@supabase/supabase-js@2"]){try{await loadScriptAsset(src,30000);if(window.supabase&&window.supabase.createClient)return}catch(e){lastError=e}}throw new Error("Не загрузилась библиотека Supabase"+(lastError?": "+lastError.message:""))}
+const TEAM_SESSION_KEY="factorySupabaseSessionV1";
+
+function decodeJwtPayload(token){
+  try{
+    const part=token.split(".")[1].replace(/-/g,"+").replace(/_/g,"/");
+    const padded=part+"=".repeat((4-part.length%4)%4);
+    const bytes=Uint8Array.from(atob(padded),c=>c.charCodeAt(0));
+    return JSON.parse(new TextDecoder().decode(bytes));
+  }catch{return null}
+}
+function normalizeStoredSession(value){
+  if(!value)return null;
+  if(typeof value==="string"){try{value=JSON.parse(value)}catch{return null}}
+  if(Array.isArray(value))value=value[0];
+  if(value?.currentSession)value=value.currentSession;
+  if(value?.session)value=value.session;
+  return value?.access_token&&value?.refresh_token?value:null;
+}
+function loadStoredTeamSession(){
+  let session=normalizeStoredSession(localStorage.getItem(TEAM_SESSION_KEY));
+  if(session)return session;
+  for(let i=0;i<localStorage.length;i++){
+    const storageKey=localStorage.key(i)||"";
+    if(storageKey.startsWith("sb-")&&storageKey.endsWith("-auth-token")){
+      session=normalizeStoredSession(localStorage.getItem(storageKey));
+      if(session){
+        localStorage.setItem(TEAM_SESSION_KEY,JSON.stringify(session));
+        return session;
+      }
+    }
+  }
+  return null;
+}
+function saveStoredTeamSession(session){
+  if(session)localStorage.setItem(TEAM_SESSION_KEY,JSON.stringify(session));
+  else localStorage.removeItem(TEAM_SESSION_KEY);
+}
+function makeApiError(payload,status){
+  const message=payload?.message||payload?.msg||payload?.error_description||payload?.error||`HTTP ${status}`;
+  const error=new Error(message);
+  error.status=status;
+  error.code=payload?.code||payload?.error_code||"";
+  error.details=payload?.details||"";
+  error.hint=payload?.hint||"";
+  return error;
+}
+async function parseApiResponse(response){
+  const raw=await response.text();
+  let payload=null;
+  if(raw){try{payload=JSON.parse(raw)}catch{payload=raw}}
+  if(!response.ok)throw makeApiError(typeof payload==="object"?payload:{message:String(payload||response.statusText)},response.status);
+  return payload;
+}
+function createRestSupabaseClient(url,key){
+  const base=String(url).replace(/\/+$/,"");
+  let session=loadStoredTeamSession();
+
+  async function authRequest(path,body){
+    const response=await fetch(base+"/auth/v1/"+path,{
+      method:"POST",
+      headers:{"apikey":key,"Authorization":"Bearer "+key,"Content-Type":"application/json"},
+      body:JSON.stringify(body||{})
+    });
+    return parseApiResponse(response);
+  }
+  async function refreshSession(){
+    if(!session?.refresh_token)return null;
+    try{
+      session=await authRequest("token?grant_type=refresh_token",{refresh_token:session.refresh_token});
+      saveStoredTeamSession(session);
+      return session;
+    }catch{
+      session=null;
+      saveStoredTeamSession(null);
+      return null;
+    }
+  }
+  async function validSession(){
+    if(!session)return null;
+    const payload=decodeJwtPayload(session.access_token);
+    const expiresAt=Number(session.expires_at||payload?.exp||0);
+    if(expiresAt&&expiresAt*1000<Date.now()+60000)return refreshSession();
+    return session;
+  }
+  async function dataFetch(path,options={}){
+    let current=await validSession();
+    if(!current)throw new Error("Нет активной сессии Supabase");
+    const headers={
+      "apikey":key,
+      "Authorization":"Bearer "+current.access_token,
+      "Content-Type":"application/json",
+      ...(options.headers||{})
+    };
+    let response=await fetch(base+path,{...options,headers});
+    if(response.status===401){
+      current=await refreshSession();
+      if(!current)throw new Error("Сессия истекла. Открой вкладку «Челлендж» заново.");
+      headers.Authorization="Bearer "+current.access_token;
+      response=await fetch(base+path,{...options,headers});
+    }
+    return parseApiResponse(response);
+  }
+
+  class RestBuilder{
+    constructor(table){
+      this.table=table;
+      this.action="select";
+      this.columns="*";
+      this.filters=[];
+      this.body=null;
+      this.onConflict="";
+    }
+    select(columns="*"){this.action="select";this.columns=columns;return this}
+    upsert(rows,options={}){this.action="upsert";this.body=rows;this.onConflict=options.onConflict||"";return this}
+    delete(){this.action="delete";return this}
+    eq(column,value){this.filters.push([column,"eq."+value]);return this}
+    gte(column,value){this.filters.push([column,"gte."+value]);return this}
+    lte(column,value){this.filters.push([column,"lte."+value]);return this}
+    in(column,values){this.filters.push([column,"in.("+values.join(",")+")"]);return this}
+    async maybeSingle(){
+      const result=await this.execute();
+      if(result.error)return result;
+      const rows=Array.isArray(result.data)?result.data:[result.data];
+      return {data:rows[0]||null,error:null};
+    }
+    async execute(){
+      try{
+        const params=new URLSearchParams();
+        for(const [filterKey,value] of this.filters)params.append(filterKey,value);
+        let method="GET",headers={},body;
+        if(this.action==="select"){
+          params.set("select",this.columns);
+        }else if(this.action==="upsert"){
+          method="POST";
+          body=JSON.stringify(this.body);
+          headers.Prefer="resolution=merge-duplicates,return=minimal";
+          if(this.onConflict)params.set("on_conflict",this.onConflict);
+        }else if(this.action==="delete"){
+          method="DELETE";
+          headers.Prefer="return=minimal";
+        }
+        const query=params.toString();
+        const data=await dataFetch("/rest/v1/"+encodeURIComponent(this.table)+(query?"?"+query:""),{method,headers,body});
+        return {data:data??null,error:null};
+      }catch(error){
+        return {data:null,error};
+      }
+    }
+    then(resolve,reject){return this.execute().then(resolve,reject)}
+  }
+
+  return {
+    auth:{
+      async getSession(){
+        const current=await validSession();
+        return {data:{session:current},error:null};
+      },
+      async signInAnonymously(){
+        try{
+          session=await authRequest("signup",{});
+          saveStoredTeamSession(session);
+          return {data:{session,user:session.user},error:null};
+        }catch(error){
+          return {data:{session:null,user:null},error};
+        }
+      }
+    },
+    from(table){return new RestBuilder(table)},
+    async rpc(name,args){
+      try{
+        const data=await dataFetch("/rest/v1/rpc/"+encodeURIComponent(name),{
+          method:"POST",
+          headers:{"Prefer":"return=representation"},
+          body:JSON.stringify(args||{})
+        });
+        return {data,error:null};
+      }catch(error){
+        return {data:null,error};
+      }
+    },
+    channel(){return {on(){return this},subscribe(){return this}}},
+    removeChannel(){}
+  };
+}
+async function ensureSupabaseLibrary(){return true}
 function setTeamStatus(message,error=false){const el=$("teamStatus");if(!el)return;el.textContent=message;el.style.color=error?"var(--r)":"var(--y)"}
 function formatTeamError(error){
   const raw=String(error?.message||error||"Неизвестная ошибка");
@@ -154,6 +338,7 @@ function formatTeamError(error){
   if(low.includes("could not find the function")||low.includes("schema cache"))return "Supabase не видит функцию create_team. Нужно повторно запустить SQL и обновить схему. Техническая ошибка: "+raw;
   if(low.includes("permission denied"))return "Не хватает прав базы. Нужно повторно выполнить блок GRANT из SQL. Техническая ошибка: "+raw;
   if(low.includes("row-level security")||low.includes("rls"))return "Сработало ограничение доступа RLS. Нужно обновить политики базы. Техническая ошибка: "+raw;
+  if(low.includes("load failed")||low.includes("failed to fetch")||low.includes("network"))return "Телефон не смог связаться с Supabase. Проверь интернет и повтори попытку.";
   if(low.includes("already belongs"))return "Этот браузер уже состоит в команде. Приложение попробует восстановить её автоматически.";
   return raw;
 }
@@ -161,7 +346,7 @@ function showTeamView(name){["teamDisabled","teamSetup","teamBoard"].forEach(id=
 async function ensureTeamAuth(){
   if(!teamConfigured())return false;
   await ensureSupabaseLibrary();
-  if(!TEAM.client)TEAM.client=window.supabase.createClient(TEAM.config.supabaseUrl,TEAM.config.supabaseAnonKey,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
+  if(!TEAM.client)TEAM.client=createRestSupabaseClient(TEAM.config.supabaseUrl,TEAM.config.supabaseAnonKey);
   let {data:{session},error}=await TEAM.client.auth.getSession();
   if(error)throw error;
   if(!session){const result=await TEAM.client.auth.signInAnonymously();if(result.error)throw result.error;session=result.data.session}
@@ -321,11 +506,10 @@ async function loadLeaderboard(){
   TEAM.leaderboard=[...map.values()].sort((a,b)=>b.good-a.good||b.total-a.total||a.name.localeCompare(b.name,"ru"));renderChallenge();
 }
 function subscribeTeam(){
-  if(!TEAM.client||!TEAM.membership)return;if(TEAM.channel)TEAM.client.removeChannel(TEAM.channel);
-  TEAM.channel=TEAM.client.channel("factory-team-"+TEAM.membership.team_id)
-    .on("postgres_changes",{event:"*",schema:"public",table:"work_days",filter:"team_id=eq."+TEAM.membership.team_id},()=>loadLeaderboard())
-    .on("postgres_changes",{event:"*",schema:"public",table:"team_members",filter:"team_id=eq."+TEAM.membership.team_id},()=>loadLeaderboard())
-    .subscribe();
+  clearInterval(TEAM.pollTimer);
+  TEAM.pollTimer=setInterval(()=>{
+    if(TEAM.membership&&!document.hidden)loadLeaderboard().catch(()=>{});
+  },30000);
 }
 function renderChallenge(){
   const month=$("challengeMonth");if(month&&!month.value)month.value=mk();
