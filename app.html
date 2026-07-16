@@ -38,14 +38,14 @@
   <div class="sec"><div class="head"><h2>Таблица</h2><small id="memberCount"></small></div><div class="card leaderboard" id="leaderboard"></div></div>
 </div>
 </section>
-<div style="text-align:center;color:#666;font-size:11px;margin:18px 0 0">Версия <span id="appVersionLabel">2026.07.15.14</span></div></main>
+<div style="text-align:center;color:#666;font-size:11px;margin:18px 0 0">Версия <span id="appVersionLabel">2026.07.15.15</span></div></main>
 <nav class="nav"><button class="nbtn active" data-page="today"><span class="ni">◷</span><span class="nl">Сегодня</span></button><button class="nbtn" data-page="stats"><span class="ni">▥</span><span class="nl">Статистика</span></button><button class="nbtn" data-page="days"><span class="ni">▦</span><span class="nl">Дни</span></button><button class="nbtn" data-page="challenge"><span class="ni">🏆</span><span class="nl">Челлендж</span></button></nav>
 <dialog id="settingsDlg"><div class="modal"><h3>Настройки</h3><div class="field"><label>Цель в день, часов</label><input id="target" type="number" min="1" max="24" step=".25"></div><div class="field"><label>Допустимо нарушений</label><input id="allowed" type="number" min="0" max="31"></div><div class="ma"><button class="secondary" id="settingsCancel">Отмена</button><button class="confirm" id="settingsSave">Сохранить</button></div><div class="ma"><button class="dangerbtn" id="clear">Удалить все данные</button></div></div></dialog>
 <dialog id="manualDlg"><div class="modal"><h3 id="manualTitle"></h3><input type="hidden" id="manualId"><div class="field"><label>Дата</label><input type="date" id="manualDate"></div><div class="row"><div class="field"><label>Пришёл</label><input type="time" id="manualStart"></div><div class="field"><label>Ушёл · можно оставить пустым</label><input type="time" id="manualEnd"></div></div><div class="field"><label>Заметка</label><textarea id="manualNote"></textarea></div><div class="ma"><button class="secondary" id="manualCancel">Отмена</button><button class="confirm" id="manualSave">Сохранить</button></div></div></dialog>
 <dialog id="detailDlg"><div class="modal"><h3 id="detailTitle"></h3><div class="detailbox"><img id="detailImg"><div class="ds"><div class="dnum" id="detailTotal"></div><div class="dstatus" id="detailStatus"></div></div></div><div class="card list" id="detailList"></div><div class="ma"><button class="secondary" id="detailAdd">Добавить</button><button class="confirm" id="detailClose">Готово</button></div></div></dialog>
 <dialog id="resultDlg"><div class="result-popup"><div class="result-popup-image" id="resultPopupImageWrap"><img id="resultPopupImg" alt="Мем по итогам рабочего дня"></div><div class="result-popup-head"><h3 id="resultPopupTitle"></h3><p id="resultPopupText"></p><div class="result-popup-total" id="resultPopupTotal"></div></div><div class="result-popup-actions"><button class="confirm" id="resultClose">спасибо за все</button></div></div></dialog>
 <script>
-window.APP_VERSION = new URLSearchParams(location.search).get("v") || "2026.07.15.14";
+window.APP_VERSION = new URLSearchParams(location.search).get("v") || "2026.07.15.15";
 window.ASSET_NONCE = Date.now();
 
 
@@ -183,7 +183,10 @@ async function initTeam(force=false){
     if(TEAM.membership){await syncTeamData();subscribeTeam();await loadLeaderboard()}else showTeamView("teamSetup");
     renderChallenge();
   }catch(e){TEAM.error=e?.message||String(e);showTeamView("teamDisabled");setTeamStatus("Не удалось подключить команду: "+TEAM.error,true)}
-  finally{TEAM.loading=false}
+  finally{
+    TEAM.loading=false;
+    renderChallenge();
+  }
 }
 async function createTeam(){
   const display=$("teamDisplayName").value.trim(),name=$("teamNameInput").value.trim();
